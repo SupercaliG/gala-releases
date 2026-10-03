@@ -1,0 +1,26 @@
+name: Release push
+
+# When a release is published, tell every open Gala at once, so it checks for the update now
+# instead of at its next 5-minute check. The message only says "go check": Gala still gets the
+# update itself from this repo's releases. The URL and anon key are public by design, so they
+# are repository variables, not secrets.
+on:
+  release:
+    types: [published]
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Broadcast to Gala
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          VERSION: ${{ github.event.release.name }}
+        run: |
+          body=$(jq -nc --arg v "$VERSION" '{messages: [{topic: "gala-releases", event: "published", payload: {version: $v}}]}')
+          code=$(curl -s -o /dev/stderr -w '%{http_code}' -X POST "$SUPABASE_URL/realtime/v1/api/broadcast" \
+            -H "apikey: $SUPABASE_ANON_KEY" -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" -d "$body")
+          echo "Supabase answered $code"
+          [ "$code" = "202" ]
